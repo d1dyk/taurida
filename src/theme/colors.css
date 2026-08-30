@@ -1,0 +1,18 @@
+:root {
+  --color-bg-primary: #0B0B0B;
+  --color-bg-secondary: #111111;
+  --color-bg-card: #1A1A1A;
+  --color-bg-card-hover: #222222;
+  --color-bg-elevated: #181818;
+  --color-gold: #C5A059;
+  --color-gold-light: #DFBE77;
+  --color-gold-dim: #8B7340;
+  --color-gold-glow: rgba(197, 160, 89, 0.2);
+  --color-gold-border: rgba(197, 160, 89, 0.3);
+  --color-gold-border-subtle: rgba(197, 160, 89, 0.12);
+  --color-text-primary: #F5F5F5;
+  --color-text-secondary: #A0A0A0;
+  --color-text-muted: #666666;
+  --color-border: #2A2A2A;
+  --color-border-strong: rgba(197, 160, 89, 0.3);
+}

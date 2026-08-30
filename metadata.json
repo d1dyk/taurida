@@ -1,0 +1,6 @@
+{
+  "name": "TAURIDA ATELIER — Премиальная мебель Крыма",
+  "description": "Элитная мебель ручной работы и на заказ в Крыму. Севастополь, Ялта, Симферополь. Антикоррозийная фурнитура, влагостойкие материалы, медиа-сервер и админ-панель.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

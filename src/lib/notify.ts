@@ -1,3 +1,5 @@
+import { SiteSettingsRow } from './types';
+
 export interface OrderNotificationPayload {
   id: number;
   customerName: string;
@@ -12,12 +14,15 @@ export interface OrderNotificationPayload {
 /**
  * Send structured Telegram HTML notification to manager group
  */
-export async function sendTelegramNotification(order: OrderNotificationPayload): Promise<boolean> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+export async function sendTelegramNotification(
+  order: OrderNotificationPayload,
+  settings?: Partial<SiteSettingsRow> | null
+): Promise<boolean> {
+  const token = settings?.telegramBotToken?.trim() || process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = settings?.telegramChatId?.trim() || process.env.TELEGRAM_CHAT_ID;
 
   if (!token || !chatId) {
-    console.log(`[Notification:Telegram] Skipped (TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured). Order #${order.id}`);
+    console.log(`[Notification:Telegram] Skipped (TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured in settings or env). Order #${order.id}`);
     return false;
   }
 
@@ -70,12 +75,15 @@ ${order.comment ? `<b>Комментарий:</b>\n<i>${escapeHtml(order.comment
 /**
  * Send short SMS notification via SMS.RU (<70 symbols)
  */
-export async function sendSmsNotification(order: OrderNotificationPayload): Promise<boolean> {
-  const apiId = process.env.SMSRU_API_ID;
-  const notifyPhone = process.env.NOTIFY_PHONE;
+export async function sendSmsNotification(
+  order: OrderNotificationPayload,
+  settings?: Partial<SiteSettingsRow> | null
+): Promise<boolean> {
+  const apiId = settings?.smsRuApiId?.trim() || process.env.SMSRU_API_ID;
+  const notifyPhone = settings?.notifyPhone?.trim() || process.env.NOTIFY_PHONE;
 
   if (!apiId || !notifyPhone) {
-    console.log(`[Notification:SMS] Skipped (SMSRU_API_ID or NOTIFY_PHONE not configured). Order #${order.id}`);
+    console.log(`[Notification:SMS] Skipped (SMSRU_API_ID or NOTIFY_PHONE not configured in settings or env). Order #${order.id}`);
     return false;
   }
 

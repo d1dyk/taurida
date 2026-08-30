@@ -30,6 +30,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   };
 
   const recentNews = news.slice(0, 3);
+  const displayPhone = settings?.phone || t.contacts.phone;
 
   return (
     <div className="min-h-screen bg-[#0B0B0B]">
@@ -46,7 +47,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       <FeaturedProducts products={products} onNavigate={onNavigate} />
 
       {/* 5. Crimean Geography & Measuring Map */}
-      <CrimeaMapSection />
+      <CrimeaMapSection settings={settings} />
 
       {/* 6. Recent News & Projects */}
       {recentNews.length > 0 && (
@@ -181,11 +182,11 @@ export const HomePage: React.FC<HomePageProps> = ({
             </a>
 
             <a
-              href={`tel:${t.contacts.phone.replace(/[^\d+]/g, '')}`}
+              href={`tel:${displayPhone.replace(/[^\d+]/g, '')}`}
               className="w-full sm:w-auto py-4 px-8 bg-[#1A1A1A] border gold-border hover:bg-[#C5A059]/10 text-[#F5F5F5] hover:text-[#C5A059] text-xs font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center space-x-2"
             >
               <Phone className="w-4 h-4 text-[#C5A059]" />
-              <span>{t.ctaBottom.callUs}</span>
+              <span>{t.ctaBottom.callUs}: {displayPhone}</span>
             </a>
           </div>
         </div>

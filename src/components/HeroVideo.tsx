@@ -64,13 +64,18 @@ export const HeroVideo: React.FC<HeroVideoProps> = ({ settings, onNavigate }) =>
       <div className="relative z-10 max-w-3xl py-20 lg:py-28">
         {/* Prestige Sub-badge */}
         <span className="text-[#C5A059] text-xs font-bold uppercase tracking-[0.4em] mb-5 block">
-          Собственное производство в Севастополе • Фиолентовское шоссе, 11Б
+          Собственное производство в Севастополе • {settings?.addressSevastopol || 'Фиолентовское шоссе, 11Б'}
         </span>
 
         {/* Display Heading */}
         <h1 className="serif text-4xl sm:text-6xl lg:text-7xl font-light text-[#F5F5F5] leading-[1.08] mb-6 tracking-tight">
-          Искусство <br className="hidden sm:inline" />
-          комфорта <span className="italic text-[#C5A059]">на заказ</span>
+          {heroTitle.includes('на заказ') ? (
+            <>
+              {heroTitle.replace(/на заказ/gi, '').trim()} <span className="italic text-[#C5A059]">на заказ</span>
+            </>
+          ) : (
+            heroTitle
+          )}
         </h1>
 
         {/* Subtitle */}

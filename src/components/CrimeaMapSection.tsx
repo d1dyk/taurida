@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { MapPin, Clock, Truck, Award } from 'lucide-react';
 import { t } from '../lib/content';
+import { SiteSettingsRow } from '../lib/db';
 
-export const CrimeaMapSection: React.FC = () => {
+interface CrimeaMapSectionProps {
+  settings?: SiteSettingsRow | null;
+}
+
+export const CrimeaMapSection: React.FC<CrimeaMapSectionProps> = ({ settings }) => {
   const [selectedCity, setSelectedCity] = useState(t.geography.cities[0]);
+  const displayPhone = settings?.phone || t.contacts.phone;
+  const displayAddress = settings?.addressSevastopol || 'г. Севастополь, ул. Фиолентовское шоссе, 11Б';
 
   return (
     <section id="geography-section" className="py-20 sm:py-24 bg-[#111111] border-b border-[#2A2A2A]">
@@ -105,12 +112,12 @@ export const CrimeaMapSection: React.FC = () => {
             </div>
 
             <div className="pt-4 border-t border-[#2A2A2A] flex flex-col sm:flex-row items-center justify-between text-xs text-[#666666] gap-3">
-              <span>Производство и студия: г. Севастополь, ул. Фиолентовское шоссе, 11Б • Доставка по всему Крыму</span>
+              <span>Производство и студия: {displayAddress} • Доставка по всему Крыму</span>
               <a
-                href={`tel:${t.contacts.phone.replace(/[^\d+]/g, '')}`}
+                href={`tel:${displayPhone.replace(/[^\d+]/g, '')}`}
                 className="text-[#C5A059] font-medium hover:underline whitespace-nowrap uppercase tracking-wider"
               >
-                Обсудить проект: {t.contacts.phone}
+                Обсудить проект: {displayPhone}
               </a>
             </div>
           </div>

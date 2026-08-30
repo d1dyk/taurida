@@ -2,13 +2,17 @@ import React from 'react';
 import { Phone, MapPin, Send, MessageSquare, Shield, Clock } from 'lucide-react';
 import { t } from '../lib/content';
 import { useAuth } from '../context/AuthContext';
+import { SiteSettingsRow } from '../lib/db';
 
 interface FooterProps {
+  settings?: SiteSettingsRow | null;
   onNavigate: (view: string) => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+export const Footer: React.FC<FooterProps> = ({ settings, onNavigate }) => {
   const { openAuthModal, isAdmin } = useAuth();
+  const displayPhone = settings?.phone || t.contacts.phone;
+  const displayAddress = settings?.addressSevastopol || t.contacts.addressSevastopol;
 
   return (
     <footer className="bg-[#0B0B0B] border-t border-[#2A2A2A] text-[#A0A0A0] text-xs">
@@ -123,10 +127,10 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               <Phone className="w-4 h-4 text-[#C5A059] shrink-0 mt-0.5" />
               <div>
                 <a
-                  href={`tel:${t.contacts.phone.replace(/[^\d+]/g, '')}`}
+                  href={`tel:${displayPhone.replace(/[^\d+]/g, '')}`}
                   className="text-[#F5F5F5] font-medium hover:text-[#C5A059] block tabular-nums"
                 >
-                  {t.contacts.phone}
+                  {displayPhone}
                 </a>
                 <span className="text-[11px] text-[#666666]">{t.contacts.phoneLabel}</span>
               </div>
@@ -135,7 +139,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
             <div className="flex items-start space-x-2.5 pt-1">
               <MapPin className="w-4 h-4 text-[#C5A059] shrink-0 mt-0.5" />
               <div className="text-[11px] space-y-1 text-[#A0A0A0]">
-                <p className="text-[#F5F5F5] font-medium">{t.contacts.addressSevastopol}</p>
+                <p className="text-[#F5F5F5] font-medium">{displayAddress}</p>
                 <p className="text-[10px] text-[#666666]">Работаем и доставляем по всему Крыму</p>
               </div>
             </div>

@@ -61,7 +61,7 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] font-sans antialiased selection:bg-[var(--color-gold)] selection:text-black">
       {/* Top Header */}
-      <Header currentView={currentView} onNavigate={handleNavigate} />
+      <Header currentView={currentView} settings={settings} onNavigate={handleNavigate} />
 
       {/* Main View Router */}
       <main className="flex-1">
@@ -126,7 +126,7 @@ const AppContent: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <Footer onNavigate={handleNavigate} />
+      <Footer settings={settings} onNavigate={handleNavigate} />
 
       {/* Global Interactive Modals & Floating Elements */}
       <FloatingMiniCart currentView={currentView} onNavigate={handleNavigate} />

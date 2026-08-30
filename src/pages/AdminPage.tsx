@@ -13,12 +13,16 @@ import {
   Upload,
   LogOut,
   CheckCircle,
+  CheckCircle2,
+  Check,
   X,
   Star,
   Send,
   Loader2,
   ChevronUp,
   ChevronDown,
+  MessageSquare,
+  MessageCircle,
   Database,
   Terminal,
   HardDrive,
@@ -29,6 +33,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useStore } from '../store/useStore';
 import { authFetch, downloadAdminFile } from '../lib/api-client';
 import { FurnitureItem, Order, NewsPost, FaqItem, SiteSettingsRow, DatabaseStats, SqlQueryResult } from '../lib/db';
 import { t, fmtPrice, getCategoryTitle } from '../lib/content';
@@ -40,6 +45,7 @@ interface AdminPageProps {
 
 export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshData }) => {
   const { isAdmin, logout, openAuthModal } = useAuth();
+  const { showToast } = useStore();
   const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'news' | 'faq' | 'settings' | 'database'>('products');
 
   // State collections
@@ -59,6 +65,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
 
   const [isLoading, setIsLoading] = useState(true);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [settingsSaveSuccess, setSettingsSaveSuccess] = useState(false);
+
+  // Expandable comments state for orders
+  const [expandedComments, setExpandedComments] = useState<Record<number, boolean>>({});
+  const [copiedCommentId, setCopiedCommentId] = useState<number | null>(null);
 
   // Drawer / Modal states for CRUD
   const [isProductDrawerOpen, setIsProductDrawerOpen] = useState(false);
@@ -263,6 +275,47 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
     }
   };
 
+  const toggleCommentExpanded = (orderId: number) => {
+    setExpandedComments((prev) => ({
+      ...prev,
+      [orderId]: !prev[orderId]
+    }));
+  };
+
+  const toggleAllComments = (expand: boolean) => {
+    const next: Record<number, boolean> = {};
+    if (expand) {
+      orders.forEach((o) => {
+        if (o.comment) next[o.id] = true;
+      });
+    }
+    setExpandedComments(next);
+  };
+
+  const handleCopyComment = async (orderId: number, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedCommentId(orderId);
+      notify('Текст сообщения скопирован');
+      setTimeout(() => setCopiedCommentId(null), 2500);
+    } catch (err) {
+      notify('Не удалось скопировать текст');
+    }
+  };
+
+  const parseOrderComment = (raw?: string) => {
+    if (!raw) return { channel: null, text: '' };
+    const trimmed = raw.trim();
+    const channelMatch = trimmed.match(/^\[Канал:\s*([^\]]+)\]\s*/i);
+    if (channelMatch) {
+      return {
+        channel: channelMatch[1].trim(),
+        text: trimmed.slice(channelMatch[0].length).trim()
+      };
+    }
+    return { channel: null, text: trimmed };
+  };
+
   /* =========================================================================
      NEWS ACTIONS
      ========================================================================= */
@@ -354,9 +407,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
   /* =========================================================================
      SETTINGS ACTIONS
      ========================================================================= */
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!settings) return;
+
+    setIsSavingSettings(true);
+    setSettingsSaveSuccess(false);
 
     try {
       const res = await authFetch('/api/site-settings', {
@@ -365,11 +421,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
         body: JSON.stringify(settings)
       });
       if (res.ok) {
-        notify('Настройки сайта успешно сохранены');
+        const updated = await res.json();
+        if (updated && updated.id) {
+          setSettings(updated);
+        }
+        notify('Настройки сайта успешно сохранены и применены');
+        showToast('Настройки сайта успешно обновлены в SQLite!');
+        setSettingsSaveSuccess(true);
         onRefreshData();
+        setTimeout(() => setSettingsSaveSuccess(false), 4000);
+      } else {
+        notify('Ошибка сервера при сохранении настроек');
       }
     } catch (e) {
-      alert('Ошибка сохранения настроек');
+      notify('Ошибка сохранения настроек');
+    } finally {
+      setIsSavingSettings(false);
     }
   };
 
@@ -756,17 +823,39 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
         {/* TAB 2: ORDERS LIST WITH CSV EXPORT */}
         {activeTab === 'orders' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="heading-serif text-2xl text-white font-normal">
-                Заявки клиентов
-              </h3>
-              <button
-                onClick={handleExportOrdersCsv}
-                className="py-2.5 px-5 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border-strong)] hover:border-[var(--color-gold)] text-xs text-[var(--color-gold)] font-medium flex items-center space-x-2 transition-colors cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>{t.admin.orders.exportCsv}</span>
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 className="heading-serif text-2xl text-white font-normal">
+                  Заявки клиентов
+                </h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                  Всего заявок: {orders.length} • Нажмите на комментарий, чтобы развернуть текст
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-2.5">
+                {orders.some((o) => o.comment && o.comment.length > 50) && (
+                  <button
+                    onClick={() => toggleAllComments(!Object.values(expandedComments).some(Boolean))}
+                    className="py-2.5 px-4 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border-strong)] hover:border-[var(--color-gold)] text-xs text-white font-medium flex items-center space-x-2 transition-colors cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4 text-[#C5A059]" />
+                    <span>
+                      {Object.values(expandedComments).some(Boolean)
+                        ? 'Свернуть все сообщения'
+                        : 'Развернуть все сообщения'}
+                    </span>
+                  </button>
+                )}
+
+                <button
+                  onClick={handleExportOrdersCsv}
+                  className="py-2.5 px-5 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border-strong)] hover:border-[var(--color-gold)] text-xs text-[var(--color-gold)] font-medium flex items-center space-x-2 transition-colors cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{t.admin.orders.exportCsv}</span>
+                </button>
+              </div>
             </div>
 
             <div className="card-luxury rounded-2xl overflow-hidden border-[var(--color-border)]">
@@ -775,8 +864,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
                   <table className="w-full text-left text-xs text-[var(--color-text-secondary)]">
                     <thead className="bg-[var(--color-bg-elevated)] uppercase tracking-wider text-[11px] text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
                       <tr>
-                        <th className="p-4">{t.admin.orders.tableId}</th>
-                        <th className="p-4">{t.admin.orders.tableCustomer}</th>
+                        <th className="p-4 w-14">{t.admin.orders.tableId}</th>
+                        <th className="p-4 min-w-[260px] max-w-sm">{t.admin.orders.tableCustomer}</th>
                         <th className="p-4">{t.admin.orders.tablePhone}</th>
                         <th className="p-4">{t.admin.orders.tableArticles}</th>
                         <th className="p-4">{t.admin.orders.tableStatus}</th>
@@ -785,65 +874,165 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-border)]">
-                      {orders.map((o) => (
-                        <tr key={o.id} className="hover:bg-[var(--color-bg-elevated)]/40 transition-colors">
-                          <td className="p-4 font-mono gold-text font-semibold">#{o.id}</td>
-                          <td className="p-4">
-                            <span className="font-medium text-white block">{o.customerName}</span>
-                            {o.customerEmail && <span className="text-[11px] text-[var(--color-text-muted)]">{o.customerEmail}</span>}
-                            {o.comment && (
-                              <p className="text-[11px] text-[var(--color-text-secondary)] mt-1 italic max-w-xs">
-                                "{o.comment}"
-                              </p>
-                            )}
-                          </td>
-                          <td className="p-4 font-mono whitespace-nowrap text-white">
-                            <a href={`tel:${o.customerPhone}`} className="hover:text-[var(--color-gold)]">
-                              {o.customerPhone}
-                            </a>
-                          </td>
-                          <td className="p-4">
-                            <div className="flex flex-wrap gap-1">
-                              {o.productIds ? (
-                                o.productIds.split(',').map((id, i) => (
-                                  <span
-                                    key={i}
-                                    className="px-2 py-0.5 rounded bg-[var(--color-bg-card)] border border-[var(--color-border-strong)] font-mono text-[10px] text-white"
-                                  >
-                                    Арт. {id.trim()}
+                      {orders.map((o) => {
+                        const parsed = parseOrderComment(o.comment);
+                        const isExpanded = !!expandedComments[o.id];
+                        const isLong = parsed.text.length > 60 || parsed.text.includes('\n');
+                        const isCopied = copiedCommentId === o.id;
+
+                        return (
+                          <tr key={o.id} className="hover:bg-[var(--color-bg-elevated)]/40 transition-colors align-top">
+                            <td className="p-4 font-mono gold-text font-semibold whitespace-nowrap">#{o.id}</td>
+                            <td className="p-4 max-w-xs md:max-w-sm lg:max-w-md">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-white text-sm">{o.customerName}</span>
+                                {parsed.channel && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#C5A059]/15 text-[#C5A059] border border-[#C5A059]/30">
+                                    {parsed.channel}
                                   </span>
-                                ))
-                              ) : (
-                                <span className="text-[10px] text-[var(--color-text-muted)]">Проект</span>
+                                )}
+                              </div>
+
+                              {o.customerEmail && (
+                                <a
+                                  href={`mailto:${o.customerEmail}`}
+                                  className="text-[11px] text-[var(--color-text-muted)] hover:text-white block mt-0.5"
+                                >
+                                  {o.customerEmail}
+                                </a>
                               )}
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <select
-                              value={o.status}
-                              onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
-                              className="py-1.5 px-3 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-xs text-white focus:outline-none focus:border-[var(--color-gold)] cursor-pointer"
-                            >
-                              <option value="Новый">Новый</option>
-                              <option value="В работе">В работе</option>
-                              <option value="Готов">Готов</option>
-                              <option value="Доставлен">Доставлен</option>
-                            </select>
-                          </td>
-                          <td className="p-4 text-[11px] whitespace-nowrap text-[var(--color-text-muted)]">
-                            {new Date(o.createdAt).toLocaleString('ru-RU')}
-                          </td>
-                          <td className="p-4 text-right">
-                            <button
-                              onClick={() => handleDeleteOrder(o.id)}
-                              className="p-1.5 text-[var(--color-text-muted)] hover:text-red-400 rounded transition-colors cursor-pointer"
-                              title="Удалить заявку"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+
+                              {o.comment && (
+                                <div className="mt-2.5">
+                                  <div
+                                    className={`rounded-xl border transition-all duration-200 ${
+                                      isExpanded
+                                        ? 'bg-[#181818] border-[#C5A059]/40 shadow-lg p-3'
+                                        : 'bg-[#141414] border-[#2A2A2A] hover:border-[#3E3E3E] p-2.5'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between text-[10px] text-[#888888] mb-1.5 gap-2">
+                                      <span className="flex items-center space-x-1.5 font-medium tracking-wider text-[#A0A0A0] uppercase">
+                                        <MessageSquare className="w-3 h-3 text-[#C5A059] shrink-0" />
+                                        <span>Сообщение</span>
+                                      </span>
+
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleCopyComment(o.id, parsed.text || o.comment || '');
+                                        }}
+                                        className="text-[10px] text-[#888888] hover:text-[#C5A059] flex items-center space-x-1 transition-colors cursor-pointer shrink-0"
+                                        title="Скопировать текст сообщения"
+                                      >
+                                        {isCopied ? (
+                                          <>
+                                            <Check className="w-3 h-3 text-emerald-400" />
+                                            <span className="text-emerald-400 font-medium">Скопировано</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Copy className="w-3 h-3" />
+                                            <span>Копировать</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+
+                                    {/* Text content with click to expand */}
+                                    <div
+                                      onClick={() => isLong && toggleCommentExpanded(o.id)}
+                                      className={`text-xs text-[#E0E0E0] break-words break-all leading-relaxed ${
+                                        isLong ? 'cursor-pointer' : ''
+                                      } ${
+                                        isExpanded
+                                          ? 'whitespace-pre-wrap max-h-72 overflow-y-auto pr-1'
+                                          : isLong
+                                          ? 'line-clamp-2 italic text-[#B5B5B5]'
+                                          : 'text-[#D0D0D0]'
+                                      }`}
+                                    >
+                                      {parsed.text || o.comment}
+                                    </div>
+
+                                    {/* Toggle button */}
+                                    {isLong && (
+                                      <div className="mt-2 pt-2 border-t border-[#262626] flex items-center justify-between gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleCommentExpanded(o.id)}
+                                          className="text-[11px] font-medium text-[#C5A059] hover:text-[#DFB972] flex items-center space-x-1 cursor-pointer transition-colors"
+                                        >
+                                          {isExpanded ? (
+                                            <>
+                                              <ChevronUp className="w-3.5 h-3.5" />
+                                              <span>Свернуть</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <ChevronDown className="w-3.5 h-3.5" />
+                                              <span>Развернуть текст ({parsed.text.length} симв.)</span>
+                                            </>
+                                          )}
+                                        </button>
+                                        <span className="text-[10px] text-[#666666]">
+                                          {isExpanded ? 'Полный текст' : 'Нажмите для чтения'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-4 font-mono whitespace-nowrap text-white">
+                              <a href={`tel:${o.customerPhone}`} className="hover:text-[var(--color-gold)] font-medium">
+                                {o.customerPhone}
+                              </a>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex flex-wrap gap-1 max-w-[180px]">
+                                {o.productIds ? (
+                                  o.productIds.split(',').map((id, i) => (
+                                    <span
+                                      key={i}
+                                      className="px-2 py-0.5 rounded bg-[var(--color-bg-card)] border border-[var(--color-border-strong)] font-mono text-[10px] text-white"
+                                    >
+                                      Арт. {id.trim()}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] text-[var(--color-text-muted)]">Проект</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <select
+                                value={o.status}
+                                onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
+                                className="py-1.5 px-3 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)] text-xs text-white focus:outline-none focus:border-[var(--color-gold)] cursor-pointer"
+                              >
+                                <option value="Новый">Новый</option>
+                                <option value="В работе">В работе</option>
+                                <option value="Готов">Готов</option>
+                                <option value="Доставлен">Доставлен</option>
+                              </select>
+                            </td>
+                            <td className="p-4 text-[11px] whitespace-nowrap text-[var(--color-text-muted)]">
+                              {new Date(o.createdAt).toLocaleString('ru-RU')}
+                            </td>
+                            <td className="p-4 text-right">
+                              <button
+                                onClick={() => handleDeleteOrder(o.id)}
+                                className="p-2 text-[var(--color-text-muted)] hover:text-red-400 hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
+                                title="Удалить заявку"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -991,6 +1180,50 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
         {/* TAB 5: SITE SETTINGS & TELEGRAM / SMS NOTIFICATION PREVIEW */}
         {activeTab === 'settings' && settings && (
           <form onSubmit={handleSaveSettings} className="space-y-8">
+            {/* Top Status & Quick Save Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#141414] border border-[#2A2A2A]">
+              <div>
+                <h4 className="text-sm font-semibold text-white">Параметры сайта и шлюзы оповещений</h4>
+                <p className="text-xs text-[#888888]">Все изменения сохраняются напрямую в базу данных SQLite (таблица site_settings)</p>
+              </div>
+              <div className="flex items-center space-x-3">
+                {settingsSaveSuccess && (
+                  <span className="text-xs text-emerald-400 font-medium flex items-center space-x-1.5 animate-fade-in">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Сохранено в базу!</span>
+                  </span>
+                )}
+                <button
+                  type="submit"
+                  disabled={isSavingSettings}
+                  className="py-2.5 px-6 rounded-lg bg-[var(--color-gold)] hover:bg-[var(--color-gold-light)] text-black font-bold text-xs uppercase tracking-wider shadow-lg gold-glow flex items-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingSettings ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-black" />
+                      <span>Сохранение...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4 text-black" />
+                      <span>Сохранить настройки</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Success Banner */}
+            {settingsSaveSuccess && (
+              <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/50 flex items-center space-x-3 text-emerald-300 text-xs animate-fade-in">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div>
+                  <p className="font-semibold text-white">Настройки сайта успешно сохранены и применены!</p>
+                  <p className="text-[#AAAAAA]">Главный экран, контакты, Telegram и SMS оповещения теперь работают с новыми значениями.</p>
+                </div>
+              </div>
+            )}
+
             <div className="card-luxury p-8 rounded-2xl space-y-6">
               <h3 className="heading-serif text-2xl text-white font-normal border-b border-[var(--color-border)] pb-4">
                 {t.admin.settings.heroSection}
@@ -1191,13 +1424,32 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
               </div>
             </div>
 
-            <div className="pt-2">
+            {/* Bottom Save Action Bar */}
+            <div className="pt-2 flex items-center space-x-4">
               <button
                 type="submit"
-                className="py-3.5 px-8 rounded-full bg-[var(--color-gold)] hover:bg-[var(--color-gold-light)] text-black font-semibold text-xs uppercase tracking-wider shadow-lg gold-glow cursor-pointer"
+                disabled={isSavingSettings}
+                className="py-3.5 px-8 rounded-full bg-[var(--color-gold)] hover:bg-[var(--color-gold-light)] text-black font-bold text-xs uppercase tracking-wider shadow-lg gold-glow flex items-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
               >
-                Сохранить настройки
+                {isSavingSettings ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-black" />
+                    <span>Сохранение настроек...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 text-black" />
+                    <span>Сохранить настройки</span>
+                  </>
+                )}
               </button>
+
+              {settingsSaveSuccess && (
+                <span className="text-xs text-emerald-400 font-medium flex items-center space-x-1.5 animate-fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Все настройки обновлены и применены на сайте!</span>
+                </span>
+              )}
             </div>
           </form>
         )}

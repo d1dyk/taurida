@@ -320,12 +320,13 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
     }
 
     // Background notifications via Promise.allSettled
+    const currentSettings = sqliteDb.getSettings();
     Promise.allSettled([
       sendTelegramNotification({
         ...newOrder,
         productNames
-      }),
-      sendSmsNotification(newOrder)
+      }, currentSettings),
+      sendSmsNotification(newOrder, currentSettings)
     ]).catch((err) => {
       console.error('Background notification failed:', err);
     });
@@ -521,6 +522,7 @@ apiRouter.put('/site-settings', requireAdmin, (req: Request, res: Response) => {
 
 // POST /api/site-settings/test-notification (Admin test)
 apiRouter.post('/site-settings/test-notification', requireAdmin, async (_req: Request, res: Response) => {
+  const currentSettings = sqliteDb.getSettings();
   const testPayload = {
     id: 777,
     customerName: 'Тестовый Клиент (Севастополь)',
@@ -531,8 +533,8 @@ apiRouter.post('/site-settings/test-notification', requireAdmin, async (_req: Re
     productNames: ['Кухня «Yalta Imperial» (340 000 ₽)', 'Обеденный стол «Black Sea Monolith» (165 000 ₽)']
   };
 
-  const tgRes = await sendTelegramNotification(testPayload);
-  const smsRes = await sendSmsNotification(testPayload);
+  const tgRes = await sendTelegramNotification(testPayload, currentSettings);
+  const smsRes = await sendSmsNotification(testPayload, currentSettings);
 
   res.json({
     ok: true,

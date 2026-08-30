@@ -3,16 +3,21 @@ import { ShoppingBag, Settings, Menu, X, Phone } from 'lucide-react';
 import { t } from '../lib/content';
 import { useStore } from '../store/useStore';
 import { useAuth } from '../context/AuthContext';
+import { SiteSettingsRow } from '../lib/db';
 
 interface HeaderProps {
   currentView: string;
+  settings?: SiteSettingsRow | null;
   onNavigate: (view: string, params?: any) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate }) => {
+export const Header: React.FC<HeaderProps> = ({ currentView, settings, onNavigate }) => {
   const { selectedProductIds } = useStore();
   const { isAdmin, handleLogoClick } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const displayPhone = settings?.phone || t.contacts.phone;
+  const displayAddress = settings?.addressSevastopol || 'Севастополь, Фиолентовское ш., 11Б';
 
   const navItems = [
     { key: 'home', label: t.nav.home },
@@ -61,14 +66,14 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate }) => {
         <div className="flex items-center space-x-4 sm:space-x-6 shrink-0">
           {/* Direct phone / city on desktop */}
           <div className="hidden xl:block text-right">
-            <p className="text-[10px] text-[#666666] uppercase tracking-widest font-semibold">
-              Севастополь, Фиолентовское ш., 11Б
+            <p className="text-[10px] text-[#666666] uppercase tracking-widest font-semibold truncate max-w-[260px]">
+              {displayAddress}
             </p>
             <a
-              href={`tel:${t.contacts.phone.replace(/[^\d+]/g, '')}`}
+              href={`tel:${displayPhone.replace(/[^\d+]/g, '')}`}
               className="text-xs sm:text-sm font-medium text-[#F5F5F5] hover:text-[#C5A059] transition-colors tabular-nums"
             >
-              {t.contacts.phone}
+              {displayPhone}
             </a>
           </div>
 
@@ -149,9 +154,9 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate }) => {
             )}
 
             <div className="pt-3 border-t border-[#2A2A2A] flex items-center justify-between text-xs text-[#666666]">
-              <span className="uppercase tracking-widest text-[10px]">Севастополь, Фиолентовское ш., 11Б</span>
-              <a href={`tel:${t.contacts.phone.replace(/[^\d+]/g, '')}`} className="text-[#C5A059] font-medium">
-                {t.contacts.phone}
+              <span className="uppercase tracking-widest text-[10px] truncate max-w-[180px]">{displayAddress}</span>
+              <a href={`tel:${displayPhone.replace(/[^\d+]/g, '')}`} className="text-[#C5A059] font-medium">
+                {displayPhone}
               </a>
             </div>
           </div>

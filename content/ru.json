@@ -147,7 +147,6 @@
     "submitButton": "Отправить заявку мастеру",
     "submitting": "Отправка заявки...",
     "directMessengerTitle": "Или напишите нам напрямую в мессенджер:",
-    "tgButton": "Написать в Telegram",
     "vkButton": "Написать ВКонтакте",
     "maxButton": "Написать в MAX",
     "orderSuccessTitle": "Заявка успешно принята!",
@@ -163,7 +162,7 @@
   "ctaBottom": {
     "title": "Не нашли то, что искали?",
     "subtitle": "Мы проектируем и изготавливаем абсолютно любую корпусную и мягкую мебель по вашим эскизам, визуализациям или дизайн-проекту.",
-    "writeTg": "Обсудить проект в Telegram",
+    "writeMax": "Обсудить проект в MAX",
     "callUs": "Позвонить на производство"
   },
   "contacts": {
@@ -175,9 +174,8 @@
     "addressYalta": "",
     "workingHours": "Ежедневно с 09:00 до 20:00. Выезд на замер — по согласованию.",
     "email": "concierge@taurida-mebel.ru",
-    "telegram": "https://t.me/taurida_mebel_bot",
     "vk": "https://vk.com/taurida_mebel",
-    "max": "https://max.estate/taurida-mebel"
+    "max": "https://max.im/taurida_mebel"
   },
   "admin": {
     "title": "Панель управления TAURIDA ATELIER",
@@ -232,9 +230,11 @@
       "heroTitle": "Главный заголовок",
       "heroSubtitle": "Подзаголовок",
       "heroDisableMobileVideo": "Отключать видео на мобильных устройствах (показывать постер для экономии трафика)",
-      "notificationsSection": "Шлюзы уведомлений (Telegram & SMS)",
-      "tgBotToken": "Telegram Bot Token",
-      "tgChatId": "Telegram Chat ID группы менеджеров",
+      "notificationsSection": "Шлюзы уведомлений (Мессенджер MAX & SMS)",
+      "maxBotToken": "MAX Bot API Token / Ключ бота",
+      "maxChatId": "MAX Chat ID / ID канала менеджеров",
+      "maxWebhookUrl": "MAX Webhook URL (вебхук для мгновенных заявок)",
+      "maxContactUrl": "Ссылка на MAX чат для клиентов (например https://max.im/taurida_mebel)",
       "smsRuApiId": "SMS.RU API ID",
       "notifyPhone": "Телефон менеджера для SMS",
       "testNotification": "Отправить тестовое уведомление"

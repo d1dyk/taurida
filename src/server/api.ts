@@ -7,7 +7,7 @@ import { sqliteDb } from './sqlite';
 import { verifyCredentials, signAdminToken, verifyAdminToken, COOKIE_NAME } from '../lib/auth';
 import { isRateLimited, getClientIp } from '../lib/rate-limit';
 import { ensureUploadDir, getValidExtension, isValidFolder } from '../lib/upload';
-import { sendTelegramNotification, sendSmsNotification, verifyTelegramBot } from '../lib/notify';
+import { sendMaxNotification, sendTelegramNotification, sendSmsNotification, verifyMaxBot, verifyTelegramBot } from '../lib/notify';
 
 export const apiRouter = express.Router();
 
@@ -322,6 +322,10 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
     // Background notifications via Promise.allSettled
     const currentSettings = sqliteDb.getSettings();
     Promise.allSettled([
+      sendMaxNotification({
+        ...newOrder,
+        productNames
+      }, currentSettings),
       sendTelegramNotification({
         ...newOrder,
         productNames
@@ -520,6 +524,27 @@ apiRouter.put('/site-settings', requireAdmin, (req: Request, res: Response) => {
   res.json(updated);
 });
 
+// POST /api/site-settings/verify-max (Check MAX bot / webhook connection)
+apiRouter.post('/api/site-settings/verify-max', requireAdmin, async (req: Request, res: Response) => {
+  const currentSettings = sqliteDb.getSettings();
+  const token = (req.body?.token ?? req.body?.maxBotToken ?? currentSettings.maxBotToken)?.trim();
+  const chatId = (req.body?.chatId ?? req.body?.maxChatId ?? currentSettings.maxChatId)?.trim();
+  const webhookUrl = (req.body?.webhookUrl ?? req.body?.maxWebhookUrl ?? currentSettings.maxWebhookUrl)?.trim();
+
+  const result = await verifyMaxBot(token, chatId, webhookUrl);
+  res.json(result);
+});
+
+apiRouter.post('/site-settings/verify-max', requireAdmin, async (req: Request, res: Response) => {
+  const currentSettings = sqliteDb.getSettings();
+  const token = (req.body?.token ?? req.body?.maxBotToken ?? currentSettings.maxBotToken)?.trim();
+  const chatId = (req.body?.chatId ?? req.body?.maxChatId ?? currentSettings.maxChatId)?.trim();
+  const webhookUrl = (req.body?.webhookUrl ?? req.body?.maxWebhookUrl ?? currentSettings.maxWebhookUrl)?.trim();
+
+  const result = await verifyMaxBot(token, chatId, webhookUrl);
+  res.json(result);
+});
+
 // POST /api/site-settings/verify-telegram (Check Telegram bot token and chat connection)
 apiRouter.post('/api/site-settings/verify-telegram', requireAdmin, async (req: Request, res: Response) => {
   const currentSettings = sqliteDb.getSettings();
@@ -560,11 +585,15 @@ apiRouter.post('/site-settings/test-notification', requireAdmin, async (req: Req
     productNames: ['Кухня «Yalta Imperial» (340 000 ₽)', 'Обеденный стол «Black Sea Monolith» (165 000 ₽)']
   };
 
+  const maxRes = await sendMaxNotification(testPayload, effectiveSettings);
   const tgRes = await sendTelegramNotification(testPayload, effectiveSettings);
   const smsRes = await sendSmsNotification(testPayload, effectiveSettings);
 
   res.json({
     ok: true,
+    maxSent: maxRes.success,
+    maxStatus: maxRes.status,
+    maxMessage: maxRes.message,
     telegramSent: tgRes.success,
     telegramStatus: tgRes.status,
     telegramMessage: tgRes.message,

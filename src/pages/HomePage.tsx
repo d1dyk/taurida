@@ -6,7 +6,7 @@ import { FeaturedProducts } from '../components/FeaturedProducts';
 import { CrimeaMapSection } from '../components/CrimeaMapSection';
 import { FurnitureItem, NewsPost, FaqItem, SiteSettingsRow } from '../lib/db';
 import { t } from '../lib/content';
-import { Send, Phone, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { MessageSquare, Phone, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface HomePageProps {
   products: FurnitureItem[];
@@ -172,13 +172,13 @@ export const HomePage: React.FC<HomePageProps> = ({
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <a
-              href={t.contacts.telegram}
+              href={settings?.maxContactUrl || t.contacts.max}
               target="_blank"
               rel="noreferrer"
               className="w-full sm:w-auto py-4 px-8 gold-gradient hover:brightness-110 text-black font-bold text-xs uppercase tracking-widest transition-all duration-300 shadow-xl gold-glow flex items-center justify-center space-x-2"
             >
-              <Send className="w-4 h-4" />
-              <span>{t.ctaBottom.writeTg}</span>
+              <MessageSquare className="w-4 h-4" />
+              <span>{t.ctaBottom.writeMax}</span>
             </a>
 
             <a

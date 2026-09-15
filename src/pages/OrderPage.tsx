@@ -23,7 +23,7 @@ export const OrderPage: React.FC<OrderPageProps> = ({
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [comment, setComment] = useState('');
-  const [preferredContact, setPreferredContact] = useState<'telegram' | 'whatsapp' | 'call'>('telegram');
+  const [preferredContact, setPreferredContact] = useState<'max' | 'whatsapp' | 'call'>('max');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<number | null>(null);
@@ -215,8 +215,8 @@ export const OrderPage: React.FC<OrderPageProps> = ({
                 </label>
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { key: 'telegram', label: 'Telegram' },
-                    { key: 'whatsapp', label: 'WhatsApp / MAX' },
+                    { key: 'max', label: 'MAX' },
+                    { key: 'whatsapp', label: 'WhatsApp' },
                     { key: 'call', label: 'Звонок' }
                   ].map((chan) => (
                     <button

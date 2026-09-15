@@ -144,6 +144,10 @@ export class SQLiteService {
             hero_title TEXT DEFAULT '',
             hero_subtitle TEXT DEFAULT '',
             hero_disable_mobile_video INTEGER DEFAULT 0,
+            max_bot_token TEXT DEFAULT '',
+            max_chat_id TEXT DEFAULT '',
+            max_webhook_url TEXT DEFAULT '',
+            max_contact_url TEXT DEFAULT 'https://max.im/taurida_mebel',
             telegram_bot_token TEXT DEFAULT '',
             telegram_chat_id TEXT DEFAULT '',
             sms_ru_api_id TEXT DEFAULT '',
@@ -155,6 +159,12 @@ export class SQLiteService {
             updated_at TEXT NOT NULL
           );
         `);
+
+        // Ensure newly added columns exist in older SQLite files
+        try { this.db.exec(`ALTER TABLE site_settings ADD COLUMN max_bot_token TEXT DEFAULT ''`); } catch (_) {}
+        try { this.db.exec(`ALTER TABLE site_settings ADD COLUMN max_chat_id TEXT DEFAULT ''`); } catch (_) {}
+        try { this.db.exec(`ALTER TABLE site_settings ADD COLUMN max_webhook_url TEXT DEFAULT ''`); } catch (_) {}
+        try { this.db.exec(`ALTER TABLE site_settings ADD COLUMN max_contact_url TEXT DEFAULT 'https://max.im/taurida_mebel'`); } catch (_) {}
 
         // Seed initial data if tables are empty
         this.seedFromLegacyOrDefaults();
@@ -677,6 +687,10 @@ export class SQLiteService {
       heroTitle: row.hero_title || undefined,
       heroSubtitle: row.hero_subtitle || undefined,
       heroDisableMobileVideo: Boolean(row.hero_disable_mobile_video),
+      maxBotToken: row.max_bot_token || undefined,
+      maxChatId: row.max_chat_id || undefined,
+      maxWebhookUrl: row.max_webhook_url || undefined,
+      maxContactUrl: row.max_contact_url || 'https://max.im/taurida_mebel',
       telegramBotToken: row.telegram_bot_token || undefined,
       telegramChatId: row.telegram_chat_id || undefined,
       smsRuApiId: row.sms_ru_api_id || undefined,
@@ -697,11 +711,13 @@ export class SQLiteService {
     this.db.prepare(`
       INSERT OR REPLACE INTO site_settings (
         id, hero_video_webm, hero_video_mp4, hero_poster, hero_title, hero_subtitle,
-        hero_disable_mobile_video, telegram_bot_token, telegram_chat_id, sms_ru_api_id,
+        hero_disable_mobile_video, max_bot_token, max_chat_id, max_webhook_url, max_contact_url,
+        telegram_bot_token, telegram_chat_id, sms_ru_api_id,
         notify_phone, phone, address_sevastopol, address_simferopol, address_yalta, updated_at
       ) VALUES (
         1, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?,
         ?, ?, ?, ?, ?, ?
       )
     `).run(
@@ -711,6 +727,10 @@ export class SQLiteService {
       merged.heroTitle || '',
       merged.heroSubtitle || '',
       merged.heroDisableMobileVideo ? 1 : 0,
+      merged.maxBotToken || '',
+      merged.maxChatId || '',
+      merged.maxWebhookUrl || '',
+      merged.maxContactUrl || 'https://max.im/taurida_mebel',
       merged.telegramBotToken || '',
       merged.telegramChatId || '',
       merged.smsRuApiId || '',

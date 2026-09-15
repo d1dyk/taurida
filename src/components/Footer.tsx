@@ -28,13 +28,14 @@ export const Footer: React.FC<FooterProps> = ({ settings, onNavigate }) => {
             </p>
             <div className="pt-2 flex items-center space-x-3">
               <a
-                href={t.contacts.telegram}
+                href={settings?.maxContactUrl || t.contacts.max}
                 target="_blank"
                 rel="noreferrer"
-                className="w-9 h-9 rounded-sm bg-[#1A1A1A] border border-[#2A2A2A] flex items-center justify-center text-[#A0A0A0] hover:text-[#C5A059] hover:border-[#C5A059]/40 transition-colors"
-                title="Telegram"
+                className="px-3 h-9 rounded-sm bg-[#1A1A1A] border border-[#2A2A2A] flex items-center justify-center space-x-1.5 text-[#A0A0A0] hover:text-[#C5A059] hover:border-[#C5A059]/40 transition-colors"
+                title="Мессенджер MAX"
               >
-                <Send className="w-4 h-4" />
+                <MessageSquare className="w-4 h-4 text-[#C5A059]" />
+                <span className="text-xs font-bold text-white">MAX</span>
               </a>
               <a
                 href={t.contacts.vk}
@@ -44,15 +45,6 @@ export const Footer: React.FC<FooterProps> = ({ settings, onNavigate }) => {
                 title="VK"
               >
                 <span className="text-xs font-bold">VK</span>
-              </a>
-              <a
-                href={t.contacts.max}
-                target="_blank"
-                rel="noreferrer"
-                className="w-9 h-9 rounded-sm bg-[#1A1A1A] border border-[#2A2A2A] flex items-center justify-center text-[#A0A0A0] hover:text-[#C5A059] hover:border-[#C5A059]/40 transition-colors"
-                title="MAX"
-              >
-                <MessageSquare className="w-4 h-4" />
               </a>
             </div>
           </div>

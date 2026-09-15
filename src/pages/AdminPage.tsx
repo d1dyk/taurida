@@ -89,10 +89,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
   const [isUploading, setIsUploading] = useState(false);
   const [testNotificationResult, setTestNotificationResult] = useState<string | null>(null);
   const [testNotificationDetails, setTestNotificationDetails] = useState<{
+    maxSent?: boolean;
+    maxMessage?: string;
     telegramSent?: boolean;
     telegramMessage?: string;
     smsSent?: boolean;
     smsMessage?: string;
+  } | null>(null);
+
+  const [isVerifyingMax, setIsVerifyingMax] = useState(false);
+  const [maxVerifyResult, setMaxVerifyResult] = useState<{
+    ok: boolean;
+    bot?: { username?: string; name?: string };
+    channel?: { id?: string | number; title?: string };
+    webhook?: { url: string; status: string };
+    error?: string;
+    hint?: string;
   } | null>(null);
 
   const [isVerifyingTelegram, setIsVerifyingTelegram] = useState(false);
@@ -459,6 +471,46 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
     }
   };
 
+  const handleVerifyMax = async () => {
+    if (!settings?.maxWebhookUrl?.trim() && !settings?.maxBotToken?.trim()) {
+      notify('Сначала введите MAX Webhook URL или токен бота');
+      return;
+    }
+
+    setIsVerifyingMax(true);
+    setMaxVerifyResult(null);
+
+    try {
+      const res = await authFetch('/api/site-settings/verify-max', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: settings.maxBotToken,
+          chatId: settings.maxChatId,
+          webhookUrl: settings.maxWebhookUrl
+        })
+      });
+
+      const d = await res.json();
+      setMaxVerifyResult(d);
+
+      if (d.ok) {
+        notify('Шлюз MAX успешно проверен и подключен!');
+        showToast('Шлюз мессенджера MAX подключен!');
+      } else {
+        notify(d.error || 'Ошибка проверки шлюза MAX');
+      }
+    } catch (e) {
+      setMaxVerifyResult({
+        ok: false,
+        error: 'Ошибка соединения с сервером',
+        hint: 'Проверьте доступность интернета и повторите попытку.'
+      });
+    } finally {
+      setIsVerifyingMax(false);
+    }
+  };
+
   const handleVerifyTelegram = async () => {
     if (!settings?.telegramBotToken?.trim()) {
       notify('Сначала введите токен Telegram бота');
@@ -512,10 +564,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
       if (res.ok) {
         setTestNotificationDetails(d);
         setTestNotificationResult(
-          `Telegram: ${d.telegramSent ? '✅ Доставлено' : '⚠️ ' + (d.telegramMessage || 'Пропущено')} | SMS: ${d.smsSent ? '✅ Отправлено' : '⚠️ ' + (d.smsMessage || 'Пропущено')}`
+          `MAX: ${d.maxSent ? '✅ Доставлено' : '⚠️ ' + (d.maxMessage || 'Пропущено')} | SMS: ${d.smsSent ? '✅ Отправлено' : '⚠️ ' + (d.smsMessage || 'Пропущено')}`
         );
-        if (d.telegramSent) {
-          showToast('Тестовое уведомление успешно доставлено в Telegram!');
+        if (d.maxSent) {
+          showToast('Тестовое уведомление успешно доставлено в MAX!');
+        } else if (d.telegramSent) {
+          showToast('Тестовое уведомление доставлено в Telegram!');
         }
       } else {
         setTestNotificationResult('Ошибка тестовой отправки');
@@ -1377,52 +1431,52 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
               </div>
             </div>
 
-            {/* Notification Integrations Panel */}
+            {/* Notification Integrations Panel (MAX & SMS) */}
             <div className="card-luxury p-8 rounded-2xl space-y-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[var(--color-border)] pb-4">
                 <div>
                   <h3 className="heading-serif text-2xl text-white font-normal flex items-center space-x-2.5">
-                    <Bot className="w-6 h-6 text-[#C5A059]" />
+                    <MessageSquare className="w-6 h-6 text-[#C5A059]" />
                     <span>{t.admin.settings.notificationsSection}</span>
                   </h3>
                   <p className="text-xs text-[#888888] mt-1">
-                    Мгновенное оповещение администраторов и менеджеров в Telegram и по SMS при поступлении новых заявок с сайта
+                    Мгновенная отправка заявок менеджерам в мессенджер MAX (через Webhook / Bot API) и SMS-дублирование
                   </p>
                 </div>
 
                 <div className="flex items-center space-x-2">
                   <button
                     type="button"
-                    onClick={handleVerifyTelegram}
-                    disabled={isVerifyingTelegram || !settings.telegramBotToken}
+                    onClick={handleVerifyMax}
+                    disabled={isVerifyingMax || (!settings.maxWebhookUrl && !settings.maxBotToken)}
                     className="py-2 px-4 rounded-xl bg-[#1A1A1A] border border-[#333333] hover:border-[#C5A059] text-xs text-[#E0E0E0] hover:text-[#C5A059] font-medium flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-40"
                   >
-                    {isVerifyingTelegram ? (
+                    {isVerifyingMax ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C5A059]" />
-                        <span>Проверка бота...</span>
+                        <span>Проверка MAX...</span>
                       </>
                     ) : (
                       <>
                         <ShieldCheck className="w-3.5 h-3.5 text-[#C5A059]" />
-                        <span>Проверить бота (GetMe)</span>
+                        <span>Проверить шлюз MAX</span>
                       </>
                     )}
                   </button>
                 </div>
               </div>
 
-              {/* Telegram Bot Live Status Banner */}
-              {telegramVerifyResult && (
+              {/* MAX Gateway Live Status Banner */}
+              {maxVerifyResult && (
                 <div
                   className={`p-4 rounded-xl border text-xs transition-all ${
-                    telegramVerifyResult.ok
+                    maxVerifyResult.ok
                       ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
                       : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
                   }`}
                 >
                   <div className="flex items-start space-x-3">
-                    {telegramVerifyResult.ok ? (
+                    {maxVerifyResult.ok ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                     ) : (
                       <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
@@ -1430,33 +1484,39 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
                     <div className="space-y-1.5 w-full">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-semibold text-white">
-                          {telegramVerifyResult.ok
-                            ? `Бот активен: ${telegramVerifyResult.bot?.firstName} (@${telegramVerifyResult.bot?.username})`
-                            : `Ошибка Telegram бота: ${telegramVerifyResult.error}`}
+                          {maxVerifyResult.ok
+                            ? 'Шлюз MAX активен и готов к приему заявок'
+                            : `Ошибка подключения MAX: ${maxVerifyResult.error}`}
                         </span>
 
-                        {telegramVerifyResult.bot?.username && (
+                        {settings.maxContactUrl && (
                           <a
-                            href={`https://t.me/${telegramVerifyResult.bot.username}`}
+                            href={settings.maxContactUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center space-x-1 py-1 px-2.5 rounded-lg bg-[#222222] border border-[#444444] text-[#C5A059] hover:text-white text-[11px] font-medium transition-colors"
                           >
-                            <span>Открыть @{telegramVerifyResult.bot.username}</span>
+                            <span>Открыть чат MAX</span>
                             <ExternalLink className="w-3 h-3" />
                           </a>
                         )}
                       </div>
 
-                      {telegramVerifyResult.chat && (
+                      {maxVerifyResult.webhook && (
                         <p className="text-[11px] text-[#A0A0A0]">
-                          Чат подключен: <strong className="text-white">{telegramVerifyResult.chat.title}</strong> (Тип: {telegramVerifyResult.chat.type}, ID: {telegramVerifyResult.chat.id})
+                          Вебхук: <strong className="text-white font-mono">{maxVerifyResult.webhook.url}</strong> ({maxVerifyResult.webhook.status})
                         </p>
                       )}
 
-                      {telegramVerifyResult.hint && (
+                      {maxVerifyResult.channel && (
+                        <p className="text-[11px] text-[#A0A0A0]">
+                          Канал: <strong className="text-white">{maxVerifyResult.channel.title}</strong> (ID: {maxVerifyResult.channel.id})
+                        </p>
+                      )}
+
+                      {maxVerifyResult.hint && (
                         <p className="text-[11px] leading-relaxed text-[#D0D0D0] bg-[#000000]/30 p-2.5 rounded-lg border border-[#333333]/50">
-                          💡 <strong>Подсказка:</strong> {telegramVerifyResult.hint}
+                          💡 <strong>Статус:</strong> {maxVerifyResult.hint}
                         </p>
                       )}
                     </div>
@@ -1464,44 +1524,86 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
                 </div>
               )}
 
-              {/* Telegram & SMS Inputs */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider font-medium">
-                      {t.admin.settings.tgBotToken}
-                    </label>
-                    <span className="text-[10px] text-[#888888] font-mono">от @BotFather</span>
+              {/* MAX Messenger Inputs */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider font-medium">
+                        {t.admin.settings.maxWebhookUrl}
+                      </label>
+                      <span className="text-[10px] text-[#C5A059] font-semibold">Рекомендуется</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={settings.maxWebhookUrl || ''}
+                      onChange={(e) => setSettings({ ...settings, maxWebhookUrl: e.target.value })}
+                      placeholder="https://api.max.im/webhook/taurida-orders..."
+                      className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono focus:outline-none focus:border-[#C5A059]"
+                    />
+                    <p className="text-[11px] text-[#777777] mt-1">
+                      URL вебхука MAX для мгновенного получения структурированных заявок
+                    </p>
                   </div>
-                  <input
-                    type="text"
-                    value={settings.telegramBotToken || ''}
-                    onChange={(e) => setSettings({ ...settings, telegramBotToken: e.target.value })}
-                    placeholder="8307397058:AAHKXDykUOVXz0kd..."
-                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono focus:outline-none focus:border-[#C5A059]"
-                  />
-                  <p className="text-[11px] text-[#777777] mt-1">
-                    Токен, выданный официальным ботом Telegram @BotFather
-                  </p>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider font-medium">
+                        {t.admin.settings.maxContactUrl}
+                      </label>
+                      <span className="text-[10px] text-[#888888] font-mono">для кнопки на сайте</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={settings.maxContactUrl || ''}
+                      onChange={(e) => setSettings({ ...settings, maxContactUrl: e.target.value })}
+                      placeholder="https://max.im/taurida_mebel"
+                      className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono focus:outline-none focus:border-[#C5A059]"
+                    />
+                    <p className="text-[11px] text-[#777777] mt-1">
+                      Прямая ссылка на диалог или канал в MAX для заказчиков на сайте
+                    </p>
+                  </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider font-medium">
-                      {t.admin.settings.tgChatId}
-                    </label>
-                    <span className="text-[10px] text-[#888888] font-mono">ID чата / группы</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider font-medium">
+                        {t.admin.settings.maxBotToken}
+                      </label>
+                      <span className="text-[10px] text-[#888888] font-mono">MAX Bot API</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={settings.maxBotToken || ''}
+                      onChange={(e) => setSettings({ ...settings, maxBotToken: e.target.value })}
+                      placeholder="max_sec_token_xxxxxxxx..."
+                      className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono focus:outline-none focus:border-[#C5A059]"
+                    />
+                    <p className="text-[11px] text-[#777777] mt-1">
+                      Токен бота MAX (если используется Bot API вместо Webhook)
+                    </p>
                   </div>
-                  <input
-                    type="text"
-                    value={settings.telegramChatId || ''}
-                    onChange={(e) => setSettings({ ...settings, telegramChatId: e.target.value })}
-                    placeholder="2101060574 или -100..."
-                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono focus:outline-none focus:border-[#C5A059]"
-                  />
-                  <p className="text-[11px] text-[#777777] mt-1">
-                    Ваш Telegram ID (узнать в @userinfobot) или ID группы менеджеров
-                  </p>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider font-medium">
+                        {t.admin.settings.maxChatId}
+                      </label>
+                      <span className="text-[10px] text-[#888888] font-mono">ID чата / канала</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={settings.maxChatId || ''}
+                      onChange={(e) => setSettings({ ...settings, maxChatId: e.target.value })}
+                      placeholder="channel_taurida_orders"
+                      className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono focus:outline-none focus:border-[#C5A059]"
+                    />
+                    <p className="text-[11px] text-[#777777] mt-1">
+                      Идентификатор чата или группы менеджеров в MAX
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -1555,12 +1657,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
 
                     <button
                       type="button"
-                      onClick={handleVerifyTelegram}
-                      disabled={isVerifyingTelegram || !settings.telegramBotToken}
+                      onClick={handleVerifyMax}
+                      disabled={isVerifyingMax || (!settings.maxWebhookUrl && !settings.maxBotToken)}
                       className="py-2.5 px-4 rounded-xl bg-[#161616] border border-[#2E2E2E] hover:border-[#444444] text-xs text-[#BBBBBB] font-medium flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-40"
                     >
-                      <Bot className="w-3.5 h-3.5 text-[#C5A059]" />
-                      <span>Диагностика бота</span>
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#C5A059]" />
+                      <span>Диагностика MAX</span>
                     </button>
                   </div>
 
@@ -1580,20 +1682,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                       <div className={`p-3 rounded-lg border ${
-                        testNotificationDetails.telegramSent
+                        testNotificationDetails.maxSent
                           ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
                           : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
                       }`}>
                         <div className="flex items-center space-x-2 font-medium">
-                          {testNotificationDetails.telegramSent ? (
+                          {testNotificationDetails.maxSent ? (
                             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                           ) : (
                             <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
                           )}
-                          <span>Telegram: {testNotificationDetails.telegramSent ? 'Успешно доставлено' : 'Не доставлено'}</span>
+                          <span>MAX: {testNotificationDetails.maxSent ? 'Успешно доставлено' : 'Не доставлено'}</span>
                         </div>
                         <p className="text-[11px] text-[#B0B0B0] mt-1 pl-6 leading-relaxed">
-                          {testNotificationDetails.telegramMessage || (testNotificationDetails.telegramSent ? 'Сообщение отправлено в чат' : 'Проверьте токен и chat ID')}
+                          {testNotificationDetails.maxMessage || (testNotificationDetails.maxSent ? 'Заявка передана в шлюз MAX' : 'Укажите Webhook URL или Bot Token')}
                         </p>
                       </div>
 
@@ -1618,19 +1720,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
                   </div>
                 )}
 
-                {/* Helpful Telegram Setup Guide */}
+                {/* Helpful MAX Setup Guide */}
                 <div className="p-4 rounded-xl bg-[#141414] border border-[#222222] space-y-2 text-xs text-[#999999]">
                   <div className="flex items-center space-x-2 text-[#C5A059] font-medium">
                     <Info className="w-4 h-4 shrink-0" />
-                    <span>Как настроить доставку уведомлений в Telegram:</span>
+                    <span>Интеграция с мессенджером MAX:</span>
                   </div>
                   <ol className="list-decimal list-inside space-y-1 text-[11px] text-[#A0A0A0] pl-1">
                     <li>
-                      <strong className="text-white">Если получаете заявки в ЛИЧНЫЙ Telegram:</strong> укажите ваш токен и Chat ID. 
-                      <span className="text-amber-300 font-medium"> ОБЯЗАТЕЛЬНО откройте вашего бота в Telegram и нажмите кнопку «Запустить» (/start)</span>, иначе Telegram блокирует сообщения от бота.
+                      <strong className="text-white">Через Webhook URL:</strong> вставьте адрес вашего вебхука MAX. При каждой новой заявке сервер отправляет подробный JSON с данными заказчика.
                     </li>
                     <li>
-                      <strong className="text-white">Если получаете заявки в ГРУППУ менеджеров:</strong> добавьте бота в группу, выдайте права администратора на отправку сообщений, и укажите Chat ID группы (для супергрупп он начинается с <code>-100</code>).
+                      <strong className="text-white">Кнопка прямого контакта:</strong> укажите ссылку на ваш профиль или канал MAX (например <code>https://max.im/taurida_mebel</code>), чтобы клиенты могли написать вам в один клик.
                     </li>
                     <li>
                       После ввода данных нажмите кнопку <strong className="text-white">«Сохранить настройки»</strong> вверху страницы.

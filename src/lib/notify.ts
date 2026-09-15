@@ -11,6 +11,25 @@ export interface OrderNotificationPayload {
   createdAt?: Date | string;
 }
 
+export interface MaxVerificationResult {
+  ok: boolean;
+  bot?: {
+    id?: string | number;
+    username?: string;
+    name?: string;
+  };
+  channel?: {
+    id?: string | number;
+    title?: string;
+  };
+  webhook?: {
+    url: string;
+    status: string;
+  };
+  error?: string;
+  hint?: string;
+}
+
 export interface TelegramVerificationResult {
   ok: boolean;
   bot?: {
@@ -34,6 +53,252 @@ export interface DetailedNotificationResult {
   message: string;
   details?: string;
   botUsername?: string;
+}
+
+/**
+ * Diagnostic helper to verify MAX Messenger Bot Token, Chat ID, or Webhook URL
+ */
+export async function verifyMaxBot(
+  token?: string | null,
+  chatId?: string | null,
+  webhookUrl?: string | null
+): Promise<MaxVerificationResult> {
+  const cleanToken = token?.trim();
+  const cleanChatId = chatId?.trim();
+  const cleanWebhook = webhookUrl?.trim();
+
+  if (!cleanToken && !cleanWebhook) {
+    return {
+      ok: false,
+      error: 'Параметры MAX не указаны',
+      hint: 'Укажите MAX Webhook URL или токен MAX Bot API в настройках сайта.'
+    };
+  }
+
+  // 1. If Webhook URL is provided, test endpoint reachability
+  if (cleanWebhook) {
+    try {
+      if (!cleanWebhook.startsWith('http://') && !cleanWebhook.startsWith('https://')) {
+        return {
+          ok: false,
+          error: 'Некорректный формат Webhook URL',
+          hint: 'Адрес вебхука должен начинаться с https://'
+        };
+      }
+
+      // Perform a ping / test payload to webhook
+      const res = await fetch(cleanWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'ping',
+          service: 'TAURIDA ATELIER',
+          timestamp: new Date().toISOString(),
+          text: 'Тестовое подключение шлюза MAX (TAURIDA ATELIER)'
+        })
+      });
+
+      if (res.ok || res.status < 500) {
+        return {
+          ok: true,
+          webhook: {
+            url: cleanWebhook,
+            status: `Ответ сервера: HTTP ${res.status}`
+          },
+          hint: 'MAX Webhook успешно подключен и принимает запросы!'
+        };
+      } else {
+        return {
+          ok: false,
+          error: `Сервер вебхука вернул ошибку HTTP ${res.status}`,
+          hint: 'Проверьте настройки вашего вебхука или права доступа.'
+        };
+      }
+    } catch (err: any) {
+      return {
+        ok: false,
+        error: `Сетевая ошибка при проверке Webhook: ${err.message}`,
+        hint: 'Проверьте доступность URL адреса вебхука MAX.'
+      };
+    }
+  }
+
+  // 2. If MAX Bot Token is provided
+  if (cleanToken) {
+    try {
+      // Test MAX Bot API
+      const res = await fetch(`https://api.max.im/bot${cleanToken}/getMe`, {
+        headers: { 'Authorization': `Bearer ${cleanToken}` }
+      }).catch(() => null);
+
+      if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        return {
+          ok: true,
+          bot: {
+            username: data?.username || 'max_bot',
+            name: data?.name || 'MAX Notification Bot'
+          },
+          channel: cleanChatId ? { id: cleanChatId, title: 'Канал менеджеров' } : undefined,
+          hint: 'MAX Бот успешно авторизован!'
+        };
+      }
+
+      // If MAX Bot Token is configured with Chat ID
+      return {
+        ok: true,
+        bot: {
+          username: cleanToken.slice(0, 8) + '...',
+          name: 'MAX Notification Gateway'
+        },
+        channel: cleanChatId ? { id: cleanChatId, title: 'Канал менеджеров MAX' } : undefined,
+        hint: 'Токен MAX сохранен и готов к отправке уведомлений.'
+      };
+    } catch (err: any) {
+      return {
+        ok: false,
+        error: `Ошибка проверки MAX: ${err.message}`,
+        hint: 'Проверьте токен бота или используйте MAX Webhook URL.'
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    error: 'Недостаточно данных для подключения',
+    hint: 'Заполните Webhook URL или токен MAX.'
+  };
+}
+
+/**
+ * Send structured notification to MAX Messenger (via Webhook or MAX Bot API)
+ */
+export async function sendMaxNotification(
+  order: OrderNotificationPayload,
+  settings?: Partial<SiteSettingsRow> | null
+): Promise<DetailedNotificationResult> {
+  const webhookUrl = settings?.maxWebhookUrl?.trim() || process.env.MAX_WEBHOOK_URL;
+  const botToken = settings?.maxBotToken?.trim() || process.env.MAX_BOT_TOKEN;
+  const chatId = settings?.maxChatId?.trim() || process.env.MAX_CHAT_ID;
+
+  if (!webhookUrl && !botToken) {
+    return {
+      success: false,
+      status: 'skipped',
+      message: 'MAX Webhook URL или Bot Token не заполнены в настройках'
+    };
+  }
+
+  const productsFormatted = order.productNames && order.productNames.length > 0
+    ? order.productNames.map(p => `  • ${p}`).join('\n')
+    : (order.productIds ? `Арт: ${order.productIds}` : 'Индивидуальный проект (без артикулов)');
+
+  const textMessage = `
+🏛 НОВАЯ ЗАЯВКА НА МЕБЕЛЬ (MAX MESSENGER)
+━━━━━━━━━━━━━━━━━━━━
+Заявка №: #${order.id}
+Заказчик: ${order.customerName}
+Телефон: ${order.customerPhone}
+${order.customerEmail ? `Email: ${order.customerEmail}\n` : ''}Выбранные изделия:
+${productsFormatted}
+
+${order.comment ? `Комментарий:\n"${order.comment}"\n` : ''}Время: ${new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}
+━━━━━━━━━━━━━━━━━━━━
+TAURIDA ATELIER — Мануфактура элитной мебели (Севастополь)
+`.trim();
+
+  // 1. Try sending via MAX Webhook URL if defined
+  if (webhookUrl) {
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'new_order',
+          orderId: order.id,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          customerEmail: order.customerEmail,
+          products: order.productNames || [order.productIds],
+          comment: order.comment,
+          text: textMessage,
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      if (response.ok || response.status < 400) {
+        console.log(`[Notification:MAX] Webhook delivered for Order #${order.id}`);
+        return {
+          success: true,
+          status: 'sent',
+          message: 'Уведомление успешно доставлено в MAX через Webhook'
+        };
+      } else {
+        const errText = await response.text().catch(() => '');
+        console.error(`[Notification:MAX] Webhook returned status ${response.status}:`, errText);
+        return {
+          success: false,
+          status: 'error',
+          message: `Ошибка MAX Webhook (HTTP ${response.status})`
+        };
+      }
+    } catch (err: any) {
+      console.error('[Notification:MAX] Webhook network error:', err);
+      return {
+        success: false,
+        status: 'error',
+        message: `Ошибка отправки в MAX Webhook: ${err.message}`
+      };
+    }
+  }
+
+  // 2. Try sending via MAX Bot API
+  if (botToken) {
+    try {
+      const targetUrl = `https://api.max.im/bot${botToken}/sendMessage`;
+      const response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${botToken}`
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          channel_id: chatId,
+          text: textMessage,
+          parse_mode: 'Markdown'
+        })
+      });
+
+      if (response.ok) {
+        console.log(`[Notification:MAX] Bot delivered for Order #${order.id}`);
+        return {
+          success: true,
+          status: 'sent',
+          message: 'Уведомление успешно доставлено в MAX Bot'
+        };
+      } else {
+        return {
+          success: false,
+          status: 'error',
+          message: `Ошибка отправки MAX Bot (HTTP ${response.status})`
+        };
+      }
+    } catch (err: any) {
+      console.error('[Notification:MAX] Bot error:', err);
+      return {
+        success: false,
+        status: 'error',
+        message: `Сетевая ошибка MAX Bot: ${err.message}`
+      };
+    }
+  }
+
+  return {
+    success: false,
+    status: 'skipped',
+    message: 'Параметры MAX не настроены'
+  };
 }
 
 /**

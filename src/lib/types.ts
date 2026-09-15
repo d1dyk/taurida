@@ -55,6 +55,10 @@ export interface SiteSettingsRow {
   heroTitle?: string;
   heroSubtitle?: string;
   heroDisableMobileVideo: boolean;
+  maxBotToken?: string;
+  maxChatId?: string;
+  maxWebhookUrl?: string;
+  maxContactUrl?: string;
   telegramBotToken?: string;
   telegramChatId?: string;
   smsRuApiId?: string;

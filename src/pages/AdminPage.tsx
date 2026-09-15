@@ -30,7 +30,11 @@ import {
   RefreshCw,
   FileCode,
   Server,
-  AlertCircle
+  AlertCircle,
+  Bot,
+  ExternalLink,
+  Info,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../store/useStore';
@@ -84,6 +88,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
 
   const [isUploading, setIsUploading] = useState(false);
   const [testNotificationResult, setTestNotificationResult] = useState<string | null>(null);
+  const [testNotificationDetails, setTestNotificationDetails] = useState<{
+    telegramSent?: boolean;
+    telegramMessage?: string;
+    smsSent?: boolean;
+    smsMessage?: string;
+  } | null>(null);
+
+  const [isVerifyingTelegram, setIsVerifyingTelegram] = useState(false);
+  const [telegramVerifyResult, setTelegramVerifyResult] = useState<{
+    ok: boolean;
+    bot?: { id: number; username: string; firstName: string };
+    chat?: { id: string | number; title?: string; username?: string; type?: string };
+    error?: string;
+    hint?: string;
+  } | null>(null);
 
   // Fetch all admin data
   const fetchData = async () => {
@@ -440,20 +459,69 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
     }
   };
 
-  const handleTestNotification = async () => {
-    setTestNotificationResult('Отправка...');
+  const handleVerifyTelegram = async () => {
+    if (!settings?.telegramBotToken?.trim()) {
+      notify('Сначала введите токен Telegram бота');
+      return;
+    }
+
+    setIsVerifyingTelegram(true);
+    setTelegramVerifyResult(null);
+
     try {
-      const res = await authFetch('/api/site-settings/test-notification', { method: 'POST' });
+      const res = await authFetch('/api/site-settings/verify-telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: settings.telegramBotToken,
+          chatId: settings.telegramChatId
+        })
+      });
+
+      const d = await res.json();
+      setTelegramVerifyResult(d);
+
+      if (d.ok) {
+        notify(`Бот найден: @${d.bot?.username || 'Telegram Bot'}`);
+        showToast(`Бот @${d.bot?.username} успешно подключен!`);
+      } else {
+        notify(d.error || 'Ошибка проверки Telegram бота');
+      }
+    } catch (e) {
+      setTelegramVerifyResult({
+        ok: false,
+        error: 'Ошибка соединения с сервером',
+        hint: 'Проверьте доступность интернета и повторите попытку.'
+      });
+    } finally {
+      setIsVerifyingTelegram(false);
+    }
+  };
+
+  const handleTestNotification = async () => {
+    setTestNotificationResult('Отправка тестового уведомления...');
+    setTestNotificationDetails(null);
+
+    try {
+      const res = await authFetch('/api/site-settings/test-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings || {})
+      });
       const d = await res.json();
       if (res.ok) {
+        setTestNotificationDetails(d);
         setTestNotificationResult(
-          `Telegram: ${d.telegramSent ? '✅ Доставлено' : '⚠️ Пропущено (проверьте токен)'} | SMS: ${d.smsSent ? '✅ Отправлено' : '⚠️ Пропущено'}`
+          `Telegram: ${d.telegramSent ? '✅ Доставлено' : '⚠️ ' + (d.telegramMessage || 'Пропущено')} | SMS: ${d.smsSent ? '✅ Отправлено' : '⚠️ ' + (d.smsMessage || 'Пропущено')}`
         );
+        if (d.telegramSent) {
+          showToast('Тестовое уведомление успешно доставлено в Telegram!');
+        }
       } else {
         setTestNotificationResult('Ошибка тестовой отправки');
       }
     } catch (e) {
-      setTestNotificationResult('Ошибка соединения');
+      setTestNotificationResult('Ошибка соединения с сервером');
     }
   };
 
@@ -1311,39 +1379,134 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
 
             {/* Notification Integrations Panel */}
             <div className="card-luxury p-8 rounded-2xl space-y-6">
-              <h3 className="heading-serif text-2xl text-white font-normal border-b border-[var(--color-border)] pb-4">
-                {t.admin.settings.notificationsSection}
-              </h3>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[var(--color-border)] pb-4">
+                <div>
+                  <h3 className="heading-serif text-2xl text-white font-normal flex items-center space-x-2.5">
+                    <Bot className="w-6 h-6 text-[#C5A059]" />
+                    <span>{t.admin.settings.notificationsSection}</span>
+                  </h3>
+                  <p className="text-xs text-[#888888] mt-1">
+                    Мгновенное оповещение администраторов и менеджеров в Telegram и по SMS при поступлении новых заявок с сайта
+                  </p>
+                </div>
 
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={handleVerifyTelegram}
+                    disabled={isVerifyingTelegram || !settings.telegramBotToken}
+                    className="py-2 px-4 rounded-xl bg-[#1A1A1A] border border-[#333333] hover:border-[#C5A059] text-xs text-[#E0E0E0] hover:text-[#C5A059] font-medium flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-40"
+                  >
+                    {isVerifyingTelegram ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C5A059]" />
+                        <span>Проверка бота...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-3.5 h-3.5 text-[#C5A059]" />
+                        <span>Проверить бота (GetMe)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Telegram Bot Live Status Banner */}
+              {telegramVerifyResult && (
+                <div
+                  className={`p-4 rounded-xl border text-xs transition-all ${
+                    telegramVerifyResult.ok
+                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                      : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                  }`}
+                >
+                  <div className="flex items-start space-x-3">
+                    {telegramVerifyResult.ok ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                    )}
+                    <div className="space-y-1.5 w-full">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold text-white">
+                          {telegramVerifyResult.ok
+                            ? `Бот активен: ${telegramVerifyResult.bot?.firstName} (@${telegramVerifyResult.bot?.username})`
+                            : `Ошибка Telegram бота: ${telegramVerifyResult.error}`}
+                        </span>
+
+                        {telegramVerifyResult.bot?.username && (
+                          <a
+                            href={`https://t.me/${telegramVerifyResult.bot.username}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center space-x-1 py-1 px-2.5 rounded-lg bg-[#222222] border border-[#444444] text-[#C5A059] hover:text-white text-[11px] font-medium transition-colors"
+                          >
+                            <span>Открыть @{telegramVerifyResult.bot.username}</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+
+                      {telegramVerifyResult.chat && (
+                        <p className="text-[11px] text-[#A0A0A0]">
+                          Чат подключен: <strong className="text-white">{telegramVerifyResult.chat.title}</strong> (Тип: {telegramVerifyResult.chat.type}, ID: {telegramVerifyResult.chat.id})
+                        </p>
+                      )}
+
+                      {telegramVerifyResult.hint && (
+                        <p className="text-[11px] leading-relaxed text-[#D0D0D0] bg-[#000000]/30 p-2.5 rounded-lg border border-[#333333]/50">
+                          💡 <strong>Подсказка:</strong> {telegramVerifyResult.hint}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Telegram & SMS Inputs */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider block mb-1.5 font-medium">
-                    {t.admin.settings.tgBotToken}
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider font-medium">
+                      {t.admin.settings.tgBotToken}
+                    </label>
+                    <span className="text-[10px] text-[#888888] font-mono">от @BotFather</span>
+                  </div>
                   <input
                     type="text"
                     value={settings.telegramBotToken || ''}
                     onChange={(e) => setSettings({ ...settings, telegramBotToken: e.target.value })}
-                    placeholder="123456789:ABCdefGHIjkl..."
-                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono"
+                    placeholder="8307397058:AAHKXDykUOVXz0kd..."
+                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono focus:outline-none focus:border-[#C5A059]"
                   />
+                  <p className="text-[11px] text-[#777777] mt-1">
+                    Токен, выданный официальным ботом Telegram @BotFather
+                  </p>
                 </div>
 
                 <div>
-                  <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider block mb-1.5 font-medium">
-                    {t.admin.settings.tgChatId}
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider font-medium">
+                      {t.admin.settings.tgChatId}
+                    </label>
+                    <span className="text-[10px] text-[#888888] font-mono">ID чата / группы</span>
+                  </div>
                   <input
                     type="text"
                     value={settings.telegramChatId || ''}
                     onChange={(e) => setSettings({ ...settings, telegramChatId: e.target.value })}
-                    placeholder="-100123456789"
-                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono"
+                    placeholder="2101060574 или -100..."
+                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono focus:outline-none focus:border-[#C5A059]"
                   />
+                  <p className="text-[11px] text-[#777777] mt-1">
+                    Ваш Telegram ID (узнать в @userinfobot) или ID группы менеджеров
+                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* SMS.RU Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-[#222222]">
                 <div>
                   <label className="text-xs text-[var(--color-text-secondary)] uppercase tracking-wider block mb-1.5 font-medium">
                     {t.admin.settings.smsRuApiId}
@@ -1353,8 +1516,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
                     value={settings.smsRuApiId || ''}
                     onChange={(e) => setSettings({ ...settings, smsRuApiId: e.target.value })}
                     placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
-                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono"
+                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono focus:outline-none focus:border-[#C5A059]"
                   />
+                  <p className="text-[11px] text-[#777777] mt-1">
+                    API ID из личного кабинета sms.ru (необязательно)
+                  </p>
                 </div>
 
                 <div>
@@ -1365,27 +1531,112 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome, onRefreshD
                     type="text"
                     value={settings.notifyPhone || ''}
                     onChange={(e) => setSettings({ ...settings, notifyPhone: e.target.value })}
-                    placeholder="+79780000000"
-                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono"
+                    placeholder="+79787258540"
+                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--color-bg-elevated)] border border-[var(--color-border)] text-white text-xs font-mono focus:outline-none focus:border-[#C5A059]"
                   />
+                  <p className="text-[11px] text-[#777777] mt-1">
+                    Номер телефона администратора для получения дублирующих SMS
+                  </p>
                 </div>
               </div>
 
-              <div className="pt-2 flex flex-col sm:flex-row items-center gap-4">
-                <button
-                  type="button"
-                  onClick={handleTestNotification}
-                  className="py-2.5 px-6 rounded-xl bg-[var(--color-bg-elevated)] border border-[var(--color-border-strong)] hover:border-[var(--color-gold)] text-xs gold-text font-semibold uppercase tracking-wider flex items-center space-x-2 cursor-pointer"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>{t.admin.settings.testNotification}</span>
-                </button>
+              {/* Test Action & Results */}
+              <div className="pt-3 border-t border-[#222222] space-y-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleTestNotification}
+                      className="py-2.5 px-6 rounded-xl bg-[var(--color-bg-elevated)] border border-[var(--color-border-strong)] hover:border-[var(--color-gold)] text-xs gold-text font-semibold uppercase tracking-wider flex items-center space-x-2 transition-colors cursor-pointer"
+                    >
+                      <Send className="w-4 h-4 text-[#C5A059]" />
+                      <span>{t.admin.settings.testNotification}</span>
+                    </button>
 
-                {testNotificationResult && (
-                  <span className="text-xs text-[var(--color-text-secondary)] font-mono">
-                    {testNotificationResult}
-                  </span>
+                    <button
+                      type="button"
+                      onClick={handleVerifyTelegram}
+                      disabled={isVerifyingTelegram || !settings.telegramBotToken}
+                      className="py-2.5 px-4 rounded-xl bg-[#161616] border border-[#2E2E2E] hover:border-[#444444] text-xs text-[#BBBBBB] font-medium flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-40"
+                    >
+                      <Bot className="w-3.5 h-3.5 text-[#C5A059]" />
+                      <span>Диагностика бота</span>
+                    </button>
+                  </div>
+
+                  {testNotificationResult && (
+                    <span className="text-xs text-[var(--color-text-secondary)] font-mono">
+                      {testNotificationResult}
+                    </span>
+                  )}
+                </div>
+
+                {/* Detailed Test Results Breakdown */}
+                {testNotificationDetails && (
+                  <div className="p-4 rounded-xl bg-[#111111] border border-[#262626] space-y-2 text-xs">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-semibold text-white">Результат тестовой отправки:</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                      <div className={`p-3 rounded-lg border ${
+                        testNotificationDetails.telegramSent
+                          ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+                          : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+                      }`}>
+                        <div className="flex items-center space-x-2 font-medium">
+                          {testNotificationDetails.telegramSent ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                          )}
+                          <span>Telegram: {testNotificationDetails.telegramSent ? 'Успешно доставлено' : 'Не доставлено'}</span>
+                        </div>
+                        <p className="text-[11px] text-[#B0B0B0] mt-1 pl-6 leading-relaxed">
+                          {testNotificationDetails.telegramMessage || (testNotificationDetails.telegramSent ? 'Сообщение отправлено в чат' : 'Проверьте токен и chat ID')}
+                        </p>
+                      </div>
+
+                      <div className={`p-3 rounded-lg border ${
+                        testNotificationDetails.smsSent
+                          ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+                          : 'bg-[#181818] border-[#333333] text-[#888888]'
+                      }`}>
+                        <div className="flex items-center space-x-2 font-medium">
+                          {testNotificationDetails.smsSent ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          ) : (
+                            <Info className="w-4 h-4 text-[#777777] shrink-0" />
+                          )}
+                          <span>SMS: {testNotificationDetails.smsSent ? 'Отправлено' : 'Пропущено'}</span>
+                        </div>
+                        <p className="text-[11px] text-[#888888] mt-1 pl-6 leading-relaxed">
+                          {testNotificationDetails.smsMessage || (testNotificationDetails.smsSent ? 'SMS отправлено' : 'Не настроено')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 )}
+
+                {/* Helpful Telegram Setup Guide */}
+                <div className="p-4 rounded-xl bg-[#141414] border border-[#222222] space-y-2 text-xs text-[#999999]">
+                  <div className="flex items-center space-x-2 text-[#C5A059] font-medium">
+                    <Info className="w-4 h-4 shrink-0" />
+                    <span>Как настроить доставку уведомлений в Telegram:</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-[11px] text-[#A0A0A0] pl-1">
+                    <li>
+                      <strong className="text-white">Если получаете заявки в ЛИЧНЫЙ Telegram:</strong> укажите ваш токен и Chat ID. 
+                      <span className="text-amber-300 font-medium"> ОБЯЗАТЕЛЬНО откройте вашего бота в Telegram и нажмите кнопку «Запустить» (/start)</span>, иначе Telegram блокирует сообщения от бота.
+                    </li>
+                    <li>
+                      <strong className="text-white">Если получаете заявки в ГРУППУ менеджеров:</strong> добавьте бота в группу, выдайте права администратора на отправку сообщений, и укажите Chat ID группы (для супергрупп он начинается с <code>-100</code>).
+                    </li>
+                    <li>
+                      После ввода данных нажмите кнопку <strong className="text-white">«Сохранить настройки»</strong> вверху страницы.
+                    </li>
+                  </ol>
+                </div>
               </div>
             </div>
 

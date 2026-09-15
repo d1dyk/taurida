@@ -7,7 +7,7 @@ import { sqliteDb } from './sqlite';
 import { verifyCredentials, signAdminToken, verifyAdminToken, COOKIE_NAME } from '../lib/auth';
 import { isRateLimited, getClientIp } from '../lib/rate-limit';
 import { ensureUploadDir, getValidExtension, isValidFolder } from '../lib/upload';
-import { sendTelegramNotification, sendSmsNotification } from '../lib/notify';
+import { sendTelegramNotification, sendSmsNotification, verifyTelegramBot } from '../lib/notify';
 
 export const apiRouter = express.Router();
 
@@ -520,27 +520,58 @@ apiRouter.put('/site-settings', requireAdmin, (req: Request, res: Response) => {
   res.json(updated);
 });
 
-// POST /api/site-settings/test-notification (Admin test)
-apiRouter.post('/site-settings/test-notification', requireAdmin, async (_req: Request, res: Response) => {
+// POST /api/site-settings/verify-telegram (Check Telegram bot token and chat connection)
+apiRouter.post('/api/site-settings/verify-telegram', requireAdmin, async (req: Request, res: Response) => {
   const currentSettings = sqliteDb.getSettings();
+  const token = (req.body?.token ?? req.body?.telegramBotToken ?? currentSettings.telegramBotToken)?.trim();
+  const chatId = (req.body?.chatId ?? req.body?.telegramChatId ?? currentSettings.telegramChatId)?.trim();
+
+  const result = await verifyTelegramBot(token, chatId);
+  res.json(result);
+});
+
+// Also support /site-settings/verify-telegram directly on apiRouter
+apiRouter.post('/site-settings/verify-telegram', requireAdmin, async (req: Request, res: Response) => {
+  const currentSettings = sqliteDb.getSettings();
+  const token = (req.body?.token ?? req.body?.telegramBotToken ?? currentSettings.telegramBotToken)?.trim();
+  const chatId = (req.body?.chatId ?? req.body?.telegramChatId ?? currentSettings.telegramChatId)?.trim();
+
+  const result = await verifyTelegramBot(token, chatId);
+  res.json(result);
+});
+
+// POST /api/site-settings/test-notification (Admin test)
+apiRouter.post('/site-settings/test-notification', requireAdmin, async (req: Request, res: Response) => {
+  const currentSettings = sqliteDb.getSettings();
+  
+  // Merge any fields passed from the form so test works even before clicking Save
+  const effectiveSettings = {
+    ...currentSettings,
+    ...(req.body || {})
+  };
+
   const testPayload = {
     id: 777,
     customerName: 'Тестовый Клиент (Севастополь)',
     customerPhone: '+7 (978) 920-44-88',
     customerEmail: 'test@taurida-mebel.ru',
     productIds: '1, 3',
-    comment: 'Тестовая проверка системы уведомлений TAURIDA ATELIER (SQLite Engine)',
+    comment: 'Тестовая проверка системы уведомлений TAURIDA ATELIER (Мануфактура элитной мебели)',
     productNames: ['Кухня «Yalta Imperial» (340 000 ₽)', 'Обеденный стол «Black Sea Monolith» (165 000 ₽)']
   };
 
-  const tgRes = await sendTelegramNotification(testPayload, currentSettings);
-  const smsRes = await sendSmsNotification(testPayload, currentSettings);
+  const tgRes = await sendTelegramNotification(testPayload, effectiveSettings);
+  const smsRes = await sendSmsNotification(testPayload, effectiveSettings);
 
   res.json({
     ok: true,
-    telegramSent: tgRes,
-    smsSent: smsRes,
-    message: 'Тестовая отправка завершена. Проверьте логи и подключенные каналы.'
+    telegramSent: tgRes.success,
+    telegramStatus: tgRes.status,
+    telegramMessage: tgRes.message,
+    smsSent: smsRes.success,
+    smsStatus: smsRes.status,
+    smsMessage: smsRes.message,
+    message: 'Тестовая отправка завершена.'
   });
 });
 
